@@ -2,8 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Drawing Space + 筆 Brush + Chat</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
+<title>Drawing Space – 筆 Brush (Smooth) + Chat</title>
 <style>
   :root { color-scheme: dark; }
   body {
@@ -11,37 +11,32 @@
     font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
     height:100vh; display:flex; flex-direction:column;
   }
-  .wrap {
-    display:flex; flex:1; flex-wrap:wrap; gap:12px;
-    padding:12px; box-sizing:border-box; overflow:hidden;
+  .wrap { display:flex; flex:1; flex-wrap:wrap; gap:12px; padding:12px; box-sizing:border-box; overflow:hidden; }
+  .left { width:min(520px,100%); }
+  #canvas {
+    width:100%; aspect-ratio:3/4; background:#00142a; /* dark navy so white ink pops */
+    border-radius:12px; touch-action:none;
+    /* stop iPad text selection / callout */
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
   }
-  .left { width:min(480px,100%); }
-  #canvas { width:100%; aspect-ratio:3/4; background:#000; border-radius:12px; touch-action:none; }
   .toolbar { display:flex; gap:8px; margin:10px 0; flex-wrap:wrap; }
-  button {
-    background:#222; color:#eee; border:1px solid #333; border-radius:10px;
-    padding:8px 14px; font-size:16px; cursor:pointer;
-  }
+  button { background:#222; color:#eee; border:1px solid #333; border-radius:10px; padding:8px 14px; font-size:16px; cursor:pointer; }
   .ink { width:20px; height:20px; border-radius:50%; border:2px solid #333; background:#eee; cursor:pointer; }
   .ink.s{width:10px;height:10px;} .ink.m{width:16px;height:16px;} .ink.l{width:24px;height:24px;} .ink.erase{background:#000;border-style:dashed;}
   .right { flex:1; min-width:280px; display:flex; flex-direction:column; height:100%; }
   .chat { flex:1; overflow-y:auto; background:#111; border:1px solid #222; border-radius:12px; padding:10px; }
   .msg { background:#1b1b1b; border-radius:12px; padding:8px 10px; margin-bottom:8px; }
-  .msg small{opacity:.7;}
+  .msg small { opacity:.7; }
   #inputBar { display:flex; gap:8px; margin-top:10px; }
-  #userInput {
-    flex:1; min-width:0; background:#111; border:1px solid #222;
-    border-radius:10px; color:#eee; padding:10px 12px; font-size:16px;
-  }
+  #userInput { flex:1; min-width:0; background:#111; border:1px solid #222; border-radius:10px; color:#eee; padding:10px 12px; font-size:16px; }
   .modeTag { padding:4px 8px; border:1px solid #333; border-radius:8px; font-size:12px; opacity:.8 }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <!-- Left: drawing area -->
   <div class="left">
-    <canvas id="canvas" width="900" height="1200"></canvas>
+    <canvas id="canvas"></canvas>
 
     <div class="toolbar">
       <span class="modeTag" id="modeLabel">Mode: ペン</span>
@@ -60,7 +55,6 @@
     </div>
   </div>
 
-  <!-- Right: chat area -->
   <div class="right">
     <div class="chat" id="chat"></div>
     <div id="inputBar">
@@ -71,166 +65,154 @@
 
 </div>
 
-<!-- OCR -->
 <script src="https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script>
-/* ========= Canvas setup ========= */
+/* ---------- Retina-correct canvas sizing ---------- */
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
-ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-ctx.strokeStyle = '#fff'; ctx.lineWidth = 6;
-ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
 
-let drawing = false, erasing = false, last = null;
-let penMode = true;     // ペン（線）モード
-let fudeMode = false;   // 筆（スタンプ）モード
+function resizeCanvas(){
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const { width: cssW, height: cssH } = canvas.getBoundingClientRect();
+  // Set internal pixel size to CSS * DPR
+  canvas.width  = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // scale drawing to CSS pixels
+  // background
+  ctx.fillStyle = '#00142a';
+  ctx.fillRect(0,0,canvas.width/dpr,canvas.height/dpr);
+}
+new ResizeObserver(resizeCanvas).observe(canvas);
+resizeCanvas();
 
-const modeLabel = document.getElementById('modeLabel');
-document.getElementById('penBtn').onclick = () => setMode('pen');
-document.getElementById('fudeBtn').onclick = () => setMode('fude');
+/* ---------- Modes & Tools ---------- */
+ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#fff'; ctx.lineWidth=6;
+
+let drawing=false, erasing=false;
+let penMode=true, fudeMode=false;
+document.getElementById('penBtn').onclick=()=>setMode('pen');
+document.getElementById('fudeBtn').onclick=()=>setMode('fude');
+const modeLabel=document.getElementById('modeLabel');
+
 function setMode(which){
-  penMode = (which === 'pen');
-  fudeMode = (which === 'fude');
-  erasing = false;
-  ctx.globalCompositeOperation = 'source-over';
+  penMode = which==='pen';
+  fudeMode = which==='fude';
+  erasing=false;
+  ctx.globalCompositeOperation='source-over';
   modeLabel.textContent = 'Mode: ' + (penMode ? 'ペン' : '筆');
 }
 
-/* ========= Tools ========= */
 function setInk(width, erase=false){
   erasing = erase;
-  if (erasing) { penMode = true; fudeMode = false; modeLabel.textContent = 'Mode: 消しゴム'; }
+  if (erasing){ penMode=true; fudeMode=false; modeLabel.textContent='Mode: 消しゴム'; }
   ctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
   if (!fudeMode) ctx.lineWidth = width || ctx.lineWidth;
   ctx.strokeStyle = erase ? 'rgba(0,0,0,1)' : '#fff';
 }
 document.querySelectorAll('.ink').forEach(el=>{
-  el.onclick = () => { el.dataset.erase ? setInk(ctx.lineWidth, true) : setInk(+el.dataset.w, false); };
+  el.onclick = () => el.dataset.erase ? setInk(ctx.lineWidth, true) : setInk(+el.dataset.w, false);
 });
 
-/* ========= Pointer helpers ========= */
-function ptFromClient(clientX, clientY){
+/* ---------- Pointer helpers ---------- */
+function ptFromClient(x, y){
   const r = canvas.getBoundingClientRect();
-  const x = clientX - r.left, y = clientY - r.top;
-  const sx = canvas.width / r.width, sy = canvas.height / r.height;
-  return { x: x*sx, y: y*sy };
+  return { x: x - r.left, y: y - r.top }; // thanks to setTransform(dpr...) we can use CSS pixels directly
 }
 
-/* ========= 筆 Brush (pressure + speed) =========
-   - Uses Pointer Events (Apple Pencil -> pressure 0..1)
-   - Fallback when pressure=0: adjust by speed (faster -> thinner)
-   - Draws by stamping circles along the path for a soft ink look
-*/
-let lastTime = 0, lastPressure = 0.5;
-const FUDE_BASE = 16;        // base radius
-const FUDE_MIN = 2;          // min radius
-const FUDE_SPACING = 1.2;    // distance between stamps (px)
-const FUDE_SOFT = 0.15;      // soft edge via shadowBlur
-
-function fudeStamp(x, y, radius){
-  // soft edge “ink” look
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = '#fff';
-  ctx.shadowColor = '#fff';
-  ctx.shadowBlur = radius * FUDE_SOFT;
+/* ---------- Smooth ペン (quadratic) ---------- */
+let lastP=null, lastCtrl=null;
+function penTo(p){
+  if(!lastP){ lastP=p; lastCtrl=p; return; }
+  const mid = { x:(lastP.x+p.x)/2, y:(lastP.y+p.y)/2 };
   ctx.beginPath();
-  ctx.arc(x, y, Math.max(FUDE_MIN, radius), 0, Math.PI*2);
+  ctx.moveTo(lastP.x, lastP.y);
+  ctx.quadraticCurveTo(lastP.x, lastP.y, mid.x, mid.y);
+  ctx.stroke();
+  lastP = p;
+}
+
+/* ---------- 筆 brush (pressure + speed + coalesced events) ---------- */
+let lastTime=0, lastForFude=null, lastPressure=0.6;
+const FUDE_BASE=14, FUDE_MIN=1.6, FUDE_SPACING=0.8, FUDE_SOFT=0.18;
+
+function fudeStamp(x, y, r){
+  ctx.save();
+  ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle='#fff';
+  ctx.shadowColor='#fff';
+  ctx.shadowBlur=r*FUDE_SOFT;
+  ctx.beginPath();
+  ctx.arc(x, y, Math.max(FUDE_MIN, r), 0, Math.PI*2);
   ctx.fill();
   ctx.restore();
 }
-function fudeBetween(a, b, pressure){
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const dist = Math.hypot(dx, dy);
-  const steps = Math.max(1, Math.floor(dist / FUDE_SPACING));
-  const now = performance.now();
-  const dt = Math.max(1, now - lastTime);
-  const speed = dist / dt; // px/ms
-  // Speed -> thinner; Pressure -> thicker
-  const pressureFactor = (pressure && pressure > 0) ? pressure : 0.6;
-  const speedFactor = 1 / (1 + speed * 12); // move fast -> <1
-  for (let i=0; i<=steps; i++){
-    const t = i/steps;
-    const x = a.x + dx*t, y = a.y + dy*t;
+function fudeBetween(a, b, pressure, dt){
+  const dx=b.x-a.x, dy=b.y-a.y;
+  const dist=Math.hypot(dx,dy);
+  const steps=Math.max(1, Math.floor(dist / FUDE_SPACING));
+  const speed = dist / Math.max(1, dt);      // px/ms
+  const pressureFactor = pressure>0 ? pressure : lastPressure;
+  const speedFactor = 1/(1 + speed*10);      // faster → thinner
+  for(let i=0;i<=steps;i++){
+    const t=i/steps, x=a.x+dx*t, y=a.y+dy*t;
     const r = Math.max(FUDE_MIN, FUDE_BASE * pressureFactor * speedFactor);
     fudeStamp(x, y, r);
   }
-  lastTime = now;
+  lastPressure = pressureFactor;
 }
 
-/* ========= Event handling ========= */
-let usingPointer = window.PointerEvent ? true : false;
+/* ---------- Drawing with Pointer Events + getCoalescedEvents ---------- */
+canvas.addEventListener('pointerdown', (e)=>{
+  canvas.setPointerCapture(e.pointerId);
+  drawing=true;
+  lastTime=performance.now();
+  lastP = ptFromClient(e.clientX, e.clientY);
+  lastForFude = lastP;
+  if (fudeMode && !erasing){
+    const p = e.pressure || (e.pointerType==='pen'?0.6:0.5);
+    fudeStamp(lastP.x, lastP.y, Math.max(FUDE_MIN, FUDE_BASE*p));
+  }
+});
+canvas.addEventListener('pointermove', (e)=>{
+  if(!drawing) return;
 
-function penDrawTo(p){
-  ctx.beginPath();
-  ctx.moveTo(last.x, last.y);
-  ctx.lineTo(p.x, p.y);
-  ctx.stroke();
-  last = p;
-}
-function fudeDrawTo(p, pressure){
-  fudeBetween(last, p, pressure ?? lastPressure ?? 0.6);
-  last = p;
-  if (pressure !== undefined) lastPressure = pressure;
-}
-
-/* Pointer Events (best for Apple Pencil) */
-if (usingPointer){
-  canvas.addEventListener('pointerdown', (e)=>{
-    canvas.setPointerCapture(e.pointerId);
-    drawing = true;
-    last = ptFromClient(e.clientX, e.clientY);
-    lastTime = performance.now();
-    lastPressure = e.pressure || 0.6;
-    if (fudeMode && !erasing){
-      fudeStamp(last.x, last.y, Math.max(FUDE_MIN, FUDE_BASE * (e.pressure||0.6)));
-    }
-  });
-  canvas.addEventListener('pointermove', (e)=>{
-    if (!drawing) return;
-    const p = ptFromClient(e.clientX, e.clientY);
+  const events = typeof e.getCoalescedEvents==='function' ? e.getCoalescedEvents() : [e];
+  for(const ev of events){
+    const p = ptFromClient(ev.clientX, ev.clientY);
     if (erasing || penMode){
-      penDrawTo(p);
+      penTo(p);
     } else if (fudeMode){
-      fudeDrawTo(p, e.pressure);
+      const now=performance.now();
+      const dt=now-lastTime; lastTime=now;
+      const pr = (ev.pressure>0 ? ev.pressure : (ev.pointerType==='pen'?0.6:0.5));
+      fudeBetween(lastForFude, p, pr, dt);
+      lastForFude = p;
     }
-  });
-  window.addEventListener('pointerup', (e)=>{ drawing=false; last=null; });
-}
+  }
+});
+window.addEventListener('pointerup', ()=>{ drawing=false; lastP=null; lastForFude=null; });
 
-/* Fallback: Mouse + Touch (no pressure) */
-canvas.addEventListener('mousedown', (e)=>{ if(usingPointer) return; drawing=true; last=ptFromClient(e.clientX,e.clientY); lastTime=performance.now(); });
-canvas.addEventListener('mousemove', (e)=>{ if(usingPointer||!drawing) return; const p=ptFromClient(e.clientX,e.clientY); (fudeMode&&!erasing)?fudeDrawTo(p,0.6):penDrawTo(p); });
-window.addEventListener('mouseup', ()=>{ if(usingPointer) return; drawing=false; last=null; });
+/* ---------- Touch/Mouse fallback (rarely used on iPad with Pencil) ---------- */
+canvas.addEventListener('touchstart', e=>{ if(drawing) return; const t=e.touches[0]; drawing=true; lastP=ptFromClient(t.clientX,t.clientY); lastForFude=lastP; lastTime=performance.now(); e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchmove', e=>{ if(!drawing) return; const t=e.touches[0]; const p=ptFromClient(t.clientX,t.clientY); const now=performance.now(); const dt=now-lastTime; lastTime=now; (fudeMode&&!erasing)?fudeBetween(lastForFude,p,0.6,dt):penTo(p); lastForFude=p; e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchend', ()=>{ drawing=false; lastP=null; lastForFude=null; }, {passive:false});
 
-canvas.addEventListener('touchstart', (e)=>{ if(usingPointer) return; const t=e.touches[0]; drawing=true; last=ptFromClient(t.clientX,t.clientY); lastTime=performance.now(); e.preventDefault(); }, {passive:false});
-canvas.addEventListener('touchmove', (e)=>{ if(usingPointer||!drawing) return; const t=e.touches[0]; const p=ptFromClient(t.clientX,t.clientY); (fudeMode&&!erasing)?fudeDrawTo(p,0.6):penDrawTo(p); e.preventDefault(); }, {passive:false});
-canvas.addEventListener('touchend', ()=>{ if(usingPointer) return; drawing=false; last=null; }, {passive:false});
+/* ---------- Buttons ---------- */
+document.getElementById('redrawBtn').onclick=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); };
+document.getElementById('saveBtn').onclick=()=>{ const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download=`drawing_${Date.now()}.png`; a.click(); };
 
-/* ========= Buttons ========= */
-document.getElementById('redrawBtn').onclick = () => ctx.clearRect(0,0,canvas.width,canvas.height);
-document.getElementById('saveBtn').onclick = () => {
-  const a = document.createElement('a');
-  a.href = canvas.toDataURL('image/png'); a.download = `drawing_${Date.now()}.png`; a.click();
-};
-
-/* ========= AI Mode (OCR + translate demo) ========= */
-document.getElementById('aiBtn').onclick = async () => {
-  const b = document.getElementById('aiBtn'); b.disabled = true; b.textContent = 'AI mode…';
+/* ---------- AI Mode (OCR + translate demo) ---------- */
+document.getElementById('aiBtn').onclick=async()=>{
+  const b=document.getElementById('aiBtn'); b.disabled=true; b.textContent='AI mode…';
   try{
-    const worker = await Tesseract.createWorker('eng', 1);
+    const worker=await Tesseract.createWorker('eng',1);
     await worker.loadLanguage('jpn'); await worker.initialize('eng+jpn');
-    const { data } = await worker.recognize(canvas.toDataURL());
-    const text = (data.text||'').trim(); await worker.terminate();
+    const {data}=await worker.recognize(canvas.toDataURL());
+    const text=(data.text||'').trim(); await worker.terminate();
     if(!text){ pushMsg('🤖 No readable text found','system'); }
-    else {
-      pushMsg('📝 OCR\n'+text,'user');
-      const t = await translate(text,'en');
-      pushMsg('🌐 Translated\n'+t,'assistant');
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-    }
+    else { pushMsg('📝 OCR\n'+text,'user'); const t=await translate(text,'en'); pushMsg('🌐 Translated\n'+t,'assistant'); ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); }
   }catch(e){ pushMsg('OCR error: '+e,'system'); }
-  b.disabled = false; b.textContent = 'AI mode';
+  b.disabled=false; b.textContent='AI mode';
 };
 async function translate(q,target='en'){
   try{
@@ -239,31 +221,23 @@ async function translate(q,target='en'){
   }catch{return q;}
 }
 
-/* ========= Chat (demo) ========= */
-document.getElementById('sendBtn').onclick = async () => {
-  const input = document.getElementById('userInput');
-  const msg = input.value.trim(); if(!msg) return;
-  pushMsg(msg,'user');
-  const reply = await fakeReply(msg);
-  pushMsg(reply,'assistant');
-  input.value=''; input.focus();
+/* ---------- Chat (demo) ---------- */
+document.getElementById('sendBtn').onclick=async()=>{
+  const input=document.getElementById('userInput'); const msg=input.value.trim(); if(!msg)return;
+  pushMsg(msg,'user'); const reply=await fakeReply(msg); pushMsg(reply,'assistant'); input.value=''; input.focus();
 };
 async function fakeReply(m){
-  if(/hello|hi/i.test(m)) return "👋 こんにちは！I’m your AI buddy.";
-  if(/筆|fude/i.test(m)) return "筆モードはApple Pencilの圧力に反応します。速く動かすと細く、ゆっくりだと太くなります。";
-  if(/translate|翻訳/i.test(m)) return "左で手書き→AI modeでOCR+翻訳→キャンバスを自動クリア。";
+  if(/筆|fude/i.test(m)) return "筆はApple Pencilの圧力と速度で太さが変わります。";
   return "You said: " + m;
 }
-
-/* ========= Chat view helper ========= */
 function pushMsg(content, role='assistant'){
-  const chat = document.getElementById('chat');
-  const div = document.createElement('div');
-  div.className = 'msg';
-  div.innerHTML = `<small>${role}</small><div>${escapeHtml(content).replace(/\n/g,'<br>')}</div>`;
-  chat.appendChild(div); chat.scrollTop = chat.scrollHeight;
+  const chat=document.getElementById('chat');
+  const div=document.createElement('div');
+  div.className='msg';
+  div.innerHTML=`<small>${role}</small><div>${escapeHtml(content).replace(/\n/g,'<br>')}</div>`;
+  chat.appendChild(div); chat.scrollTop=chat.scrollHeight;
 }
-function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#039;' }[m])); }
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 </script>
 </body>
 </html>
