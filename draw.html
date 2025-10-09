@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Drawing Space + AI mode</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin:0; background:#0b0b0b; color:#eee; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  .wrap { display:flex; gap:16px; padding:16px; }
+  .left { width: min(480px, 100%); }
+  .toolbar { display:flex; gap:8px; margin:10px 0; }
+  button { background:#222; color:#eee; border:1px solid #333; border-radius:10px; padding:10px 14px; font-size:16px; }
+  button:disabled { opacity:0.5 }
+  #canvas { width:100%; aspect-ratio: 3/4; background:#000; border-radius:16px; touch-action:none; }
+  .right { flex:1; min-width:240px; }
+  .chat { background:#111; border:1px solid #222; border-radius:14px; padding:12px; min-height:140px; }
+  .msg { background:#1b1b1b; border-radius:12px; padding:10px 12px; margin-bottom:10px; }
+  .msg small { opacity:.7 }
+  .row { display:flex; gap:8px; align-items:center; }
+  .ink { width:28px; height:28px; border-radius:50%; border:2px solid #333; background:#eee; cursor:pointer; }
+  .ink.s { width:10px; height:10px; }
+  .ink.m { width:18px; height:18px; }
+  .ink.l { width:26px; height:26px; }
+  .ink.erase { background:#000; border-style:dashed; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="left">
+    <canvas id="canvas" width="900" height="1200"></canvas>
+
+    <div class="toolbar">
+      <div class="row">
+        <div class="ink s" data-w="2" title="thin"></div>
+        <div class="ink m" data-w="6" title="medium"></div>
+        <div class="ink l" data-w="12" title="thick"></div>
+        <div class="ink erase" data-erase="1" title="eraser"></div>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button id="saveBtn">Save</button>
+      <button id="redrawBtn">Redraw</button>
+      <button id="aiBtn">AI mode</button>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="chat" id="chat"></div>
+  </div>
+</div>
+
+<!-- Tesseract.js for OCR -->
+<script src="https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
+ctx.lineCap = 'round';
+ctx.lineJoin = 'round';
+ctx.strokeStyle = '#fff';
+ctx.lineWidth = 6;
+let drawing = false, erasing = false, last = null;
+
+function setInk(width, erase=false){
+  erasing = erase;
+  ctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
+  ctx.lineWidth = width || ctx.lineWidth;
+  ctx.strokeStyle = erase ? 'rgba(0,0,0,1)' : '#fff';
+}
+document.querySelectorAll('.ink').forEach(el=>{
+  el.addEventListener('click',()=>{
+    if(el.dataset.erase){ setInk(ctx.lineWidth, true); }
+    else { setInk(parseFloat(el.dataset.w)||6, false); }
+  });
+});
+
+function pt(e){
+  const r = canvas.getBoundingClientRect();
+  const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+  const y = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+  const scaleX = canvas.width / r.width, scaleY = canvas.height / r.height;
+  return { x: x*scaleX, y: y*scaleY };
+}
+function start(e){ drawing = true; last = pt(e); }
+function move(e){
+  if(!drawing) return;
+  const p = pt(e);
+  ctx.beginPath();
+  ctx.moveTo(last.x,last.y);
+  ctx.lineTo(p.x,p.y);
+  ctx.stroke();
+  last = p;
+}
+function end(){ drawing=false; last=null; }
+
+canvas.addEventListener('mousedown', start);
+canvas.addEventListener('mousemove', move);
+window.addEventListener('mouseup', end);
+canvas.addEventListener('touchstart', e=>{ start(e); e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchmove', e=>{ move(e); e.preventDefault(); }, {passive:false});
+canvas.addEventListener('touchend', end);
+
+// Buttons
+document.getElementById('redrawBtn').onclick = () => {
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+};
+document.getElementById('saveBtn').onclick = () => {
+  const url = canvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url; a.download = `drawing_${Date.now()}.png`; a.click();
+};
+
+// --- AI MODE: OCR -> TRANSLATE -> SHOW -> CLEAR ---
+document.getElementById('aiBtn').onclick = async ()=>{
+  const aiBtn = document.getElementById('aiBtn');
+  aiBtn.disabled = true; aiBtn.textContent = 'AI mode…';
+
+  // 1) snapshot
+  const dataURL = canvas.toDataURL('image/png');
+
+  // 2) OCR (auto language: English+Japanese common pack “eng+jpn”)
+  //    Add more languages as needed (e.g., +chi_sim, +kor, +vie)
+  let text = '';
+  try {
+    const worker = await Tesseract.createWorker('eng', 1);
+    // Load extra language(s)
+    await worker.loadLanguage('jpn');
+    await worker.initialize('eng+jpn');
+    const { data } = await worker.recognize(dataURL);
+    text = (data.text||'').trim();
+    var conf = data.confidence || (data.meanConfidence*100);
+    await worker.terminate();
+
+    if(!text || (conf && conf < 45)){
+      pushMsg(`🤖 I couldn’t read that clearly (confidence ${Math.round(conf||0)}). Try writing a bit larger or with better contrast.`, 'system');
+      aiBtn.disabled=false; aiBtn.textContent='AI mode';
+      return; // do NOT clear if unreadable
+    }
+  } catch(err){
+    pushMsg('OCR error: '+String(err), 'system');
+    aiBtn.disabled=false; aiBtn.textContent='AI mode';
+    return;
+  }
+
+  // 3) Translate (demo: LibreTranslate-compatible API)
+  // Replace URL & payload for your provider (e.g., OpenAI, DeepL).
+  async function translate(q, target='en'){
+    try{
+      const res = await fetch('https://libretranslate.com/translate', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ q, source:'auto', target, format:'text' })
+      });
+      const j = await res.json();
+      return j.translatedText || q;
+    }catch(e){
+      return q; // fallback: return original
+    }
+  }
+
+  const target = 'en'; // or decide from UI / user locale
+  const translated = await translate(text, target);
+
+  // 4) Show result then CLEAR canvas
+  pushMsg('📝 OCR\n' + text, 'user');
+  pushMsg('🌐 Translated\n' + translated, 'assistant');
+
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+  aiBtn.disabled=false; aiBtn.textContent='AI mode';
+};
+
+// simple chat feed
+function pushMsg(content, role='assistant'){
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'msg';
+  div.innerHTML = `<small>${role}</small><div>${escapeHtml(content).replace(/\n/g,'<br>')}</div>`;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#039;' }[m])); }
+
+// Initialize background (optional)
+ctx.fillStyle = '#000'; ctx.fillRect(0,0,canvas.width,canvas.height);
+</script>
+</body>
+</html>
