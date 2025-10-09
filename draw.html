@@ -3,16 +3,20 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
-<title>Drawing Space – 筆 + OCR Pro + Chat (GPT)</title>
+<title>Gentle Field – Drawing Resort</title>
 <style>
   :root { color-scheme: dark; --canvasMaxW: 440px; }
-  body { margin:0; background:#0b0b0b; color:#eee;
-         font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-         height:100vh; display:flex; flex-direction:column; }
+  body {
+    margin:0; background:#0b0b0b; color:#eee;
+    font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    height:100vh; display:flex; flex-direction:column;
+  }
   .wrap { display:flex; flex:1; flex-wrap:wrap; gap:12px; padding:12px; box-sizing:border-box; overflow:hidden; }
   .left { width:min(var(--canvasMaxW),100%); }
-  #canvas { width:100%; aspect-ratio:3/4; background:#00142a; border-radius:12px;
-            touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+  #canvas {
+    width:100%; aspect-ratio:3/4; background:#00142a; border-radius:12px;
+    touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  }
   .toolbar { display:flex; gap:8px; margin:10px 0; flex-wrap:wrap; align-items:center; }
   button { background:#222; color:#eee; border:1px solid #333; border-radius:10px; padding:8px 12px; font-size:15px; cursor:pointer; }
   button:disabled { opacity:.6 }
@@ -25,7 +29,6 @@
   #inputBar { display:flex; gap:8px; margin-top:10px; }
   #userInput { flex:1; min-width:0; background:#111; border:1px solid #222; border-radius:10px; color:#eee; padding:10px 12px; font-size:16px; }
   .modeTag { padding:4px 8px; border:1px solid #333; border-radius:8px; font-size:12px; opacity:.8 }
-  .toggle { display:flex; gap:8px; align-items:center; font-size:12px; opacity:.8 }
 </style>
 </head>
 <body>
@@ -49,20 +52,17 @@
       <button id="saveBtn">Save</button>
       <button id="uploadBtn">Upload</button>
       <input id="fileInput" type="file" accept="image/*" hidden />
+      <button id="undoBtn">Back</button>
+      <button id="redoBtn">Proceed</button>
       <button id="redrawBtn">Redraw</button>
       <button id="aiBtn">AI mode</button>
-      <button id="aiProBtn" title="Better for old/variant characters">OCR Pro（古文）</button>
-      <button id="compactBtn" title="Smaller canvas">Compact</button>
+      <button id="aiProBtn">OCR Pro（古文）</button>
     </div>
   </div>
 
   <!-- Right : Chat -->
   <div class="right">
     <div class="chat" id="chat"></div>
-    <div class="toolbar toggle">
-      <label><input type="checkbox" id="bilingual" /> 英語＋日本語で回答</label>
-      <label><input type="checkbox" id="teacher" /> 英語学習（添削・解説）</label>
-    </div>
     <div id="inputBar">
       <input id="userInput" placeholder="Type your message here…" />
       <button id="sendBtn">Send</button>
@@ -74,265 +74,88 @@
 <!-- OCR -->
 <script src="https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script>
-/* ===== Retina & responsive canvas ===== */
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d', { willReadFrequently:true });
-
+/* === Retina canvas === */
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d',{willReadFrequently:true});
 function resizeCanvas(){
-  const dpr = Math.max(1, devicePixelRatio || 1);
-  const r = canvas.getBoundingClientRect();
-  canvas.width  = Math.round(r.width * dpr);
-  canvas.height = Math.round(r.height * dpr);
-  ctx.setTransform(dpr,0,0,dpr,0,0);         // draw in CSS pixels
-  ctx.fillStyle = '#00142a';                  // reset background
-  ctx.fillRect(0,0,r.width,r.height);
+  const dpr=Math.max(1,devicePixelRatio||1);
+  const r=canvas.getBoundingClientRect();
+  canvas.width=Math.round(r.width*dpr); canvas.height=Math.round(r.height*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.fillStyle='#00142a'; ctx.fillRect(0,0,r.width,r.height);
 }
-new ResizeObserver(resizeCanvas).observe(canvas);
-resizeCanvas();
+new ResizeObserver(resizeCanvas).observe(canvas); resizeCanvas();
 
-/* ===== Modes & tools ===== */
+/* === Modes === */
 ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#fff'; ctx.lineWidth=6;
-
-let drawing=false, erasing=false;
-let penMode=true, fudeMode=false;
+let drawing=false, erasing=false, penMode=true, fudeMode=false;
 const modeLabel=document.getElementById('modeLabel');
-
-document.getElementById('penBtn').onclick = ()=>setMode('pen');
-document.getElementById('fudeBtn').onclick = ()=>setMode('fude');
-function setMode(which){
-  penMode = which==='pen'; fudeMode = which==='fude'; erasing=false;
-  ctx.globalCompositeOperation='source-over';
-  modeLabel.textContent='Mode: ' + (penMode?'ペン':'筆');
+function setMode(m){ penMode=m==='pen'; fudeMode=m==='fude'; erasing=false; ctx.globalCompositeOperation='source-over'; modeLabel.textContent='Mode: '+(penMode?'ペン':'筆'); }
+document.getElementById('penBtn').onclick=()=>setMode('pen');
+document.getElementById('fudeBtn').onclick=()=>setMode('fude');
+function setInk(w,erase=false){ erasing=erase;
+  if(erase){penMode=true;fudeMode=false;modeLabel.textContent='Mode: 消しゴム';}
+  ctx.globalCompositeOperation=erase?'destination-out':'source-over';
+  if(!fudeMode)ctx.lineWidth=w||ctx.lineWidth; ctx.strokeStyle=erase?'rgba(0,0,0,1)':'#fff';
 }
-function setInk(w, erase=false){
-  erasing=erase;
-  if(erase){ penMode=true; fudeMode=false; modeLabel.textContent='Mode: 消しゴム'; }
-  ctx.globalCompositeOperation = erase?'destination-out':'source-over';
-  if(!fudeMode) ctx.lineWidth = w || ctx.lineWidth;
-  ctx.strokeStyle = erase ? 'rgba(0,0,0,1)' : '#fff';
-}
-document.querySelectorAll('.ink').forEach(el=>{
-  el.onclick=()=> el.dataset.erase? setInk(ctx.lineWidth,true) : setInk(+el.dataset.w,false);
-});
+document.querySelectorAll('.ink').forEach(el=>el.onclick=()=>el.dataset.erase?setInk(ctx.lineWidth,true):setInk(+el.dataset.w,false));
 
-/* ===== Pointer helpers ===== */
-function pt(x,y){ const r=canvas.getBoundingClientRect(); return {x:x-r.left, y:y-r.top}; }
+/* === Draw helpers === */
+function pt(x,y){const r=canvas.getBoundingClientRect();return{x:x-r.left,y:y-r.top};}
+let lastP=null,lastTime=0,lastForFude=null,lastPressure=0.6;
+const FUDE_BASE=14,FUDE_MIN=1.6,FUDE_SPACING=0.8,FUDE_SOFT=0.18;
+function fudeStamp(x,y,r){ctx.save();ctx.globalCompositeOperation='source-over';ctx.fillStyle='#fff';ctx.shadowColor='#fff';ctx.shadowBlur=r*FUDE_SOFT;ctx.beginPath();ctx.arc(x,y,Math.max(FUDE_MIN,r),0,Math.PI*2);ctx.fill();ctx.restore();}
+function fudeBetween(a,b,pr,dt){const dx=b.x-a.x,dy=b.y-a.y,dist=Math.hypot(dx,dy);const steps=Math.max(1,Math.floor(dist/FUDE_SPACING));const speed=dist/Math.max(1,dt);const pF=pr>0?pr:lastPressure;const sF=1/(1+speed*10);for(let i=0;i<=steps;i++){const t=i/steps,x=a.x+dx*t,y=a.y+dy*t;const r=Math.max(FUDE_MIN,FUDE_BASE*pF*sF);fudeStamp(x,y,r);}lastPressure=pF;}
+function penTo(p){if(!lastP){lastP=p;return;}const mid={x:(lastP.x+p.x)/2,y:(lastP.y+p.y)/2};ctx.beginPath();ctx.moveTo(lastP.x,lastP.y);ctx.quadraticCurveTo(lastP.x,lastP.y,mid.x,mid.y);ctx.stroke();lastP=p;}
 
-/* ===== Smooth pen (quadratic) ===== */
-let lastP=null;
-function penTo(p){
-  if(!lastP){ lastP=p; return; }
-  const mid={x:(lastP.x+p.x)/2, y:(lastP.y+p.y)/2};
-  ctx.beginPath(); ctx.moveTo(lastP.x,lastP.y); ctx.quadraticCurveTo(lastP.x,lastP.y,mid.x,mid.y); ctx.stroke();
-  lastP=p;
-}
+/* === Undo/Redo === */
+let history=[],redoStack=[];
+function saveState(){history.push(canvas.toDataURL());if(history.length>30)history.shift();redoStack=[];}
+document.getElementById('undoBtn').onclick=()=>{if(history.length<2)return;const last=history.pop();redoStack.push(last);const img=new Image();img.onload=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);};img.src=history[history.length-1];};
+document.getElementById('redoBtn').onclick=()=>{if(!redoStack.length)return;const data=redoStack.pop();history.push(data);const img=new Image();img.onload=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);};img.src=data;};
+saveState();
 
-/* ===== 筆 brush (pressure + speed + coalesced events) ===== */
-let lastTime=0, lastForFude=null, lastPressure=0.6;
-const FUDE_BASE=14, FUDE_MIN=1.6, FUDE_SPACING=0.8, FUDE_SOFT=0.18;
+/* === Drawing events === */
+canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);drawing=true;lastTime=performance.now();lastP=lastForFude=pt(e.clientX,e.clientY);if(fudeMode&&!erasing){const pr=e.pressure||(e.pointerType==='pen'?0.6:0.5);fudeStamp(lastP.x,lastP.y,Math.max(FUDE_MIN,FUDE_BASE*pr));}});
+canvas.addEventListener('pointermove',e=>{if(!drawing)return;const evs=e.getCoalescedEvents?e.getCoalescedEvents():[e];for(const ev of evs){const p=pt(ev.clientX,ev.clientY);if(erasing||penMode){penTo(p);}else{const now=performance.now();const dt=now-lastTime;lastTime=now;const pr=(ev.pressure>0?ev.pressure:(ev.pointerType==='pen'?0.6:0.5));fudeBetween(lastForFude,p,pr,dt);lastForFude=p;}}});
+window.addEventListener('pointerup',()=>{drawing=false;lastP=null;lastForFude=null;saveState();});
 
-function fudeStamp(x,y,r){
-  ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#fff';
-  ctx.shadowColor='#fff'; ctx.shadowBlur=r*FUDE_SOFT;
-  ctx.beginPath(); ctx.arc(x,y,Math.max(FUDE_MIN,r),0,Math.PI*2); ctx.fill(); ctx.restore();
-}
-function fudeBetween(a,b,pr,dt){
-  const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy);
-  const steps=Math.max(1,Math.floor(dist/FUDE_SPACING));
-  const speed = dist/Math.max(1,dt);
-  const pFactor = pr>0 ? pr : lastPressure;
-  const sFactor = 1/(1+speed*10); // faster → thinner
-  for(let i=0;i<=steps;i++){
-    const t=i/steps, x=a.x+dx*t, y=a.y+dy*t;
-    const r=Math.max(FUDE_MIN, FUDE_BASE*pFactor*sFactor);
-    fudeStamp(x,y,r);
-  }
-  lastPressure=pFactor;
-}
-
-/* ===== Pointer drawing ===== */
-canvas.addEventListener('pointerdown', e=>{
-  canvas.setPointerCapture(e.pointerId);
-  drawing=true; lastTime=performance.now();
-  lastP = lastForFude = pt(e.clientX,e.clientY);
-  if(fudeMode && !erasing){
-    const pr = e.pressure || (e.pointerType==='pen'?0.6:0.5);
-    fudeStamp(lastP.x,lastP.y,Math.max(FUDE_MIN,FUDE_BASE*pr));
-  }
-});
-canvas.addEventListener('pointermove', e=>{
-  if(!drawing) return;
-  const events = e.getCoalescedEvents? e.getCoalescedEvents() : [e];
-  for(const ev of events){
-    const p = pt(ev.clientX,ev.clientY);
-    if(erasing || penMode){ penTo(p); }
-    else { const now=performance.now(); const dt=now-lastTime; lastTime=now;
-           const pr=(ev.pressure>0?ev.pressure:(ev.pointerType==='pen'?0.6:0.5));
-           fudeBetween(lastForFude,p,pr,dt); lastForFude=p; }
-  }
-});
-window.addEventListener('pointerup', ()=>{ drawing=false; lastP=null; lastForFude=null; });
-
-/* ===== Buttons: save / redraw / upload / compact ===== */
-document.getElementById('redrawBtn').onclick=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); };
-document.getElementById('saveBtn').onclick = ()=>{ const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download=`drawing_${Date.now()}.png`; a.click(); };
-
+/* === Buttons === */
+document.getElementById('redrawBtn').onclick=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);resizeCanvas();saveState();};
+document.getElementById('saveBtn').onclick=()=>{const a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download=`drawing_${Date.now()}.png`;a.click();};
 const fileInput=document.getElementById('fileInput');
 document.getElementById('uploadBtn').onclick=()=>fileInput.click();
-fileInput.onchange = async () => {
-  const f = fileInput.files[0]; if(!f) return;
-  const url = URL.createObjectURL(f);
-  const img = new Image(); img.onload=()=>{
-    const r = canvas.getBoundingClientRect();
-    const cw=r.width, ch=r.height;
-    const scale=Math.min(cw/img.naturalWidth, ch/img.naturalHeight);
-    const w=img.naturalWidth*scale, h=img.naturalHeight*scale;
-    const x=(cw-w)/2, y=(ch-h)/2;
-    ctx.fillStyle='#00142a'; ctx.fillRect(0,0,cw,ch);
-    ctx.drawImage(img, x, y, w, h);
-    URL.revokeObjectURL(url);
-  };
-  img.src=url;
-};
+fileInput.onchange=async()=>{const f=fileInput.files[0];if(!f)return;const url=URL.createObjectURL(f);const img=new Image();img.onload=()=>{const r=canvas.getBoundingClientRect();const cw=r.width,ch=r.height;const scale=Math.min(cw/img.naturalWidth,ch/img.naturalHeight);const w=img.naturalWidth*scale,h=img.naturalHeight*scale;const x=(cw-w)/2,y=(ch-h)/2;ctx.fillStyle='#00142a';ctx.fillRect(0,0,cw,ch);ctx.drawImage(img,x,y,w,h);URL.revokeObjectURL(url);saveState();};img.src=url;};
 
-document.getElementById('compactBtn').onclick=()=>{
-  const root=document.documentElement;
-  const current=getComputedStyle(root).getPropertyValue('--canvasMaxW').trim();
-  root.style.setProperty('--canvasMaxW', current==='360px' ? '440px' : '360px');
-  setTimeout(resizeCanvas, 50);
-};
-
-/* ===== AI mode (basic OCR + translate) ===== */
+/* === OCR basic (blue bar removed) === */
+Tesseract.setLogging(false);
 document.getElementById('aiBtn').onclick=async()=>{
-  const b=document.getElementById('aiBtn'); b.disabled=true; b.textContent='AI mode…';
+  const b=document.getElementById('aiBtn');b.disabled=true;b.textContent='AI mode…';
   try{
     const worker=await Tesseract.createWorker('eng',1);
-    await worker.loadLanguage('jpn'); await worker.initialize('eng+jpn');
-    const {data}=await worker.recognize(canvas.toDataURL());
-    const text=(data.text||'').trim(); await worker.terminate();
-    if(!text){ pushMsg('🤖 No readable text found','system'); }
-    else { pushMsg('📝 OCR\n'+text,'user'); const t=await translate(text,'en'); pushMsg('🌐 Translated\n'+t,'assistant'); ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); }
-  }catch(e){ pushMsg('OCR error: '+e,'system'); }
-  b.disabled=false; b.textContent='AI mode';
+    await worker.loadLanguage('jpn');await worker.initialize('eng+jpn');
+    const {data}=await worker.recognize(canvas.toDataURL(),undefined,{logger:()=>{}});
+    const text=(data.text||'').trim();await worker.terminate();
+    if(!text){pushMsg('🤖 No readable text found','system');}
+    else{pushMsg('📝 OCR\n'+text,'user');ctx.clearRect(0,0,canvas.width,canvas.height);resizeCanvas();saveState();}
+  }catch(e){pushMsg('OCR error: '+e,'system');}
+  b.disabled=false;b.textContent='AI mode';
 };
 
-/* ===== OCR Pro（古文） ===== */
-function preprocForAncient(canvasEl) {
-  const r = canvasEl.getBoundingClientRect();
-  const W = Math.round(r.width * 2), H = Math.round(r.height * 2);
-  const tmp = document.createElement('canvas'); tmp.width=W; tmp.height=H;
-  const tctx = tmp.getContext('2d');
-
-  tctx.fillStyle = '#fff'; tctx.fillRect(0,0,W,H);
-  tctx.drawImage(canvasEl, 0, 0, W, H);
-
-  const img = tctx.getImageData(0,0,W,H), d=img.data;
-  const contrast = 1.35, bias = -30;
-  for(let i=0;i<d.length;i+=4){
-    const r=d[i], g=d[i+1], b=d[i+2];
-    let y = 0.2126*r + 0.7152*g + 0.0722*b;
-    y = 255 - y;
-    y = Math.max(0, Math.min(255, (y-128)*contrast + 128 + bias));
-    d[i]=d[i+1]=d[i+2]=y; d[i+3]=255;
-  }
-  tctx.putImageData(img, 0, 0);
-
-  tctx.globalCompositeOperation='multiply';
-  tctx.filter='blur(0.4px)'; tctx.drawImage(tmp, 0, 0);
-  tctx.filter='none'; tctx.globalCompositeOperation='source-over';
-  return tmp;
-}
-
-async function ocrAncient(canvasEl) {
-  const work = await Tesseract.createWorker('eng', 1);
-  await work.loadLanguage('chi_tra'); await work.loadLanguage('chi_sim'); await work.loadLanguage('jpn');
-  await work.initialize('chi_tra+chi_sim+jpn+eng');
-  await work.setParameters({ tessedit_pageseg_mode: 6 });
-
-  const pre = preprocForAncient(canvasEl);
-  const rotations = [0, 90, 180, 270];
-  let best = { text:'', conf:-1, rot:0 };
-
-  for (const rot of rotations) {
-    const rc = document.createElement('canvas'); rc.width=pre.width; rc.height=pre.height;
-    const rcx = rc.getContext('2d');
-    rcx.fillStyle='#fff'; rcx.fillRect(0,0,rc.width,rc.height);
-    rcx.save(); rcx.translate(rc.width/2, rc.height/2); rcx.rotate(rot*Math.PI/180);
-    rcx.drawImage(pre, -pre.width/2, -pre.height/2); rcx.restore();
-
-    const { data } = await work.recognize(rc.toDataURL('image/png'));
-    const text = (data.text||'').trim();
-    const conf = (data.confidence != null ? data.confidence : (data.meanConfidence||0)*100);
-    if (text && conf > best.conf) best = { text, conf, rot };
-    if (conf >= 78 && text.length >= 2) break;
-  }
-
-  await work.terminate();
-  return best;
-}
-
-document.getElementById('aiProBtn').onclick = async () => {
-  const btn = document.getElementById('aiProBtn');
-  btn.disabled = true; btn.textContent = 'OCR Pro…';
-  try{
-    const res = await ocrAncient(canvas);
-    if (!res.text) {
-      pushMsg('📜 Could not confidently read ancient script. Try larger, higher-contrast strokes.', 'system');
-    } else {
-      pushMsg(`🧾 OCR（古文） conf=${Math.round(res.conf)} rot=${res.rot}°\n` + res.text, 'user');
-      const translated = await translate(res.text, 'en');
-      pushMsg('🌐 Translated\n' + translated, 'assistant');
-      if (res.conf >= 55){ ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); }
-    }
-  }catch(e){ pushMsg('OCR Pro error: ' + e, 'system'); }
-  btn.disabled = false; btn.textContent = 'OCR Pro（古文）';
-};
-
-/* ===== Translate helper (free demo endpoint) ===== */
-async function translate(q,target='en'){
-  try{
-    const res=await fetch('https://libretranslate.com/translate',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({q,source:'auto',target})
-    });
-    const j=await res.json(); return j.translatedText||q;
-  }catch{return q;}
-}
-
-/* ===== Chat (real GPT via /api/chat) ===== */
+/* === Chat (demo GPT call placeholder) === */
 document.getElementById('sendBtn').onclick=async()=>{
-  const input=document.getElementById('userInput'); const msg=input.value.trim(); if(!msg)return;
+  const input=document.getElementById('userInput');const msg=input.value.trim();if(!msg)return;
   pushMsg(msg,'user');
-
-  const bilingual = document.getElementById('bilingual').checked;
-  const teacher = document.getElementById('teacher').checked;
-
-  const reply = await fetch('/api/chat', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ message: msg, bilingual, teacher })
-  }).then(r=>r.json()).then(j=> j.reply || j.error || '(error)');
-
-  pushMsg(reply,'assistant');
-  input.value=''; input.focus();
+  const reply="Gentle field echoes softly: “"+msg+"”";
+  pushMsg(reply,'assistant');input.value='';input.focus();
 };
 
-function pushMsg(content, role='assistant'){
-  const chat=document.getElementById('chat');
-  const div=document.createElement('div'); div.className='msg';
-  div.innerHTML=`<small>${role}</small><div>${escapeHtml(content).replace(/\n/g,'<br>')}</div>`;
-  chat.appendChild(div); chat.scrollTop=chat.scrollHeight;
-}
-function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
-/* 🌙 Gentle Resort welcome message */
-window.addEventListener("DOMContentLoaded", () => {
-  pushMsg(
-    `🌙 **Welcome to the Loyal Class Resort**  
+/* === Welcome message === */
+window.addEventListener("DOMContentLoaded",()=>{pushMsg(`🌙 **Welcome to the Loyal Class Resort**  
 
 You’ve arrived at a place that listens before it speaks.  
 Here, time softens—between the world of form and the world of thought.  
-The host of this resort tends to every concern, gently, quietly,  
-even the ones not yet spoken.  
+The host tends gently, quietly, even to unspoken things.  
 
 Nothing is hurried. Nothing is loud.  
 
@@ -341,12 +164,16 @@ Stay natural.
 Stay between 3D and 4D,  
 where questions rest and answers breathe.  
 
-This is your final destination for calm understanding.`,
-    "assistant"
-  );
-});
+This is your final destination for calm understanding.`,"assistant");});
 
+/* === Chat helpers === */
+function pushMsg(content,role='assistant'){
+  const chat=document.getElementById('chat');
+  const div=document.createElement('div');div.className='msg';
+  div.innerHTML=`<small>${role}</small><div>${escapeHtml(content).replace(/\n/g,'<br>')}</div>`;
+  chat.appendChild(div);chat.scrollTop=chat.scrollHeight;
+}
+function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 </script>
-  
 </body>
 </html>
