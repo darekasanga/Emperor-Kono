@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
-<title>Drawing Space – Compact + Upload</title>
+<title>Drawing Space – 筆 + OCR Pro + Chat</title>
 <style>
-  :root { color-scheme: dark; --canvasMaxW: 440px; } /* ← change here if you want smaller */
+  :root { color-scheme: dark; --canvasMaxW: 440px; }
   body { margin:0; background:#0b0b0b; color:#eee;
          font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
          height:100vh; display:flex; flex-direction:column; }
@@ -15,6 +15,7 @@
             touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
   .toolbar { display:flex; gap:8px; margin:10px 0; flex-wrap:wrap; align-items:center; }
   button { background:#222; color:#eee; border:1px solid #333; border-radius:10px; padding:8px 12px; font-size:15px; cursor:pointer; }
+  button:disabled { opacity:.6 }
   .ink { width:18px; height:18px; border-radius:50%; border:2px solid #333; background:#eee; cursor:pointer; }
   .ink.s{width:10px;height:10px;} .ink.m{width:16px;height:16px;} .ink.l{width:22px;height:22px;} .ink.erase{background:#000;border-style:dashed;}
   .right { flex:1; min-width:280px; display:flex; flex-direction:column; height:100%; }
@@ -49,6 +50,7 @@
       <input id="fileInput" type="file" accept="image/*" hidden />
       <button id="redrawBtn">Redraw</button>
       <button id="aiBtn">AI mode</button>
+      <button id="aiProBtn" title="Better for old/variant characters">OCR Pro（古文）</button>
       <button id="compactBtn" title="Smaller canvas">Compact</button>
     </div>
   </div>
@@ -67,7 +69,7 @@
 <!-- OCR -->
 <script src="https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script>
-/* ===== Responsive, retina-correct canvas ===== */
+/* ===== Retina & responsive canvas ===== */
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d', { willReadFrequently:true });
 
@@ -76,12 +78,12 @@ function resizeCanvas(){
   const r = canvas.getBoundingClientRect();
   canvas.width  = Math.round(r.width * dpr);
   canvas.height = Math.round(r.height * dpr);
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  // background
-  ctx.fillStyle = '#00142a';
+  ctx.setTransform(dpr,0,0,dpr,0,0);         // draw in CSS pixels
+  ctx.fillStyle = '#00142a';                  // reset background
   ctx.fillRect(0,0,r.width,r.height);
 }
-new ResizeObserver(resizeCanvas).observe(canvas); resizeCanvas();
+new ResizeObserver(resizeCanvas).observe(canvas);
+resizeCanvas();
 
 /* ===== Modes & tools ===== */
 ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#fff'; ctx.lineWidth=6;
@@ -134,7 +136,7 @@ function fudeBetween(a,b,pr,dt){
   const steps=Math.max(1,Math.floor(dist/FUDE_SPACING));
   const speed = dist/Math.max(1,dt);
   const pFactor = pr>0 ? pr : lastPressure;
-  const sFactor = 1/(1+speed*10);
+  const sFactor = 1/(1+speed*10); // faster → thinner
   for(let i=0;i<=steps;i++){
     const t=i/steps, x=a.x+dx*t, y=a.y+dy*t;
     const r=Math.max(FUDE_MIN, FUDE_BASE*pFactor*sFactor);
@@ -159,16 +161,17 @@ canvas.addEventListener('pointermove', e=>{
   for(const ev of events){
     const p = pt(ev.clientX,ev.clientY);
     if(erasing || penMode){ penTo(p); }
-    else { const now=performance.now(); const dt=now-lastTime; lastTime=now; const pr=(ev.pressure>0?ev.pressure:(ev.pointerType==='pen'?0.6:0.5)); fudeBetween(lastForFude,p,pr,dt); lastForFude=p; }
+    else { const now=performance.now(); const dt=now-lastTime; lastTime=now;
+           const pr=(ev.pressure>0?ev.pressure:(ev.pointerType==='pen'?0.6:0.5));
+           fudeBetween(lastForFude,p,pr,dt); lastForFude=p; }
   }
 });
 window.addEventListener('pointerup', ()=>{ drawing=false; lastP=null; lastForFude=null; });
 
-/* ===== Buttons ===== */
+/* ===== Buttons: save / redraw / upload / compact ===== */
 document.getElementById('redrawBtn').onclick=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); };
 document.getElementById('saveBtn').onclick = ()=>{ const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download=`drawing_${Date.now()}.png`; a.click(); };
 
-/* ✅ Upload: place image onto canvas (fit/center) */
 const fileInput=document.getElementById('fileInput');
 document.getElementById('uploadBtn').onclick=()=>fileInput.click();
 fileInput.onchange = async () => {
@@ -176,12 +179,10 @@ fileInput.onchange = async () => {
   const url = URL.createObjectURL(f);
   const img = new Image(); img.onload=()=>{
     const r = canvas.getBoundingClientRect();
-    // fit image into canvas while keeping aspect
     const cw=r.width, ch=r.height;
     const scale=Math.min(cw/img.naturalWidth, ch/img.naturalHeight);
     const w=img.naturalWidth*scale, h=img.naturalHeight*scale;
     const x=(cw-w)/2, y=(ch-h)/2;
-    // redraw bg and image
     ctx.fillStyle='#00142a'; ctx.fillRect(0,0,cw,ch);
     ctx.drawImage(img, x, y, w, h);
     URL.revokeObjectURL(url);
@@ -189,7 +190,6 @@ fileInput.onchange = async () => {
   img.src=url;
 };
 
-/* ✅ Compact toggle (smaller canvas width) */
 document.getElementById('compactBtn').onclick=()=>{
   const root=document.documentElement;
   const current=getComputedStyle(root).getPropertyValue('--canvasMaxW').trim();
@@ -197,7 +197,7 @@ document.getElementById('compactBtn').onclick=()=>{
   setTimeout(resizeCanvas, 50);
 };
 
-/* ===== AI Mode (OCR + translate demo) ===== */
+/* ===== AI mode (basic OCR + translate) ===== */
 document.getElementById('aiBtn').onclick=async()=>{
   const b=document.getElementById('aiBtn'); b.disabled=true; b.textContent='AI mode…';
   try{
@@ -210,9 +210,93 @@ document.getElementById('aiBtn').onclick=async()=>{
   }catch(e){ pushMsg('OCR error: '+e,'system'); }
   b.disabled=false; b.textContent='AI mode';
 };
+
+/* ===== OCR Pro（古文） ===== */
+// preprocess to white bg / black ink / high contrast / thicker / 2x
+function preprocForAncient(canvasEl) {
+  const r = canvasEl.getBoundingClientRect();
+  const W = Math.round(r.width * 2), H = Math.round(r.height * 2);
+  const tmp = document.createElement('canvas'); tmp.width=W; tmp.height=H;
+  const tctx = tmp.getContext('2d');
+
+  // white bg
+  tctx.fillStyle = '#fff'; tctx.fillRect(0,0,W,H);
+  // draw source scaled
+  tctx.drawImage(canvasEl, 0, 0, W, H);
+
+  // invert + contrast + bias
+  const img = tctx.getImageData(0,0,W,H), d=img.data;
+  const contrast = 1.35, bias = -30;
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i], g=d[i+1], b=d[i+2];
+    let y = 0.2126*r + 0.7152*g + 0.0722*b; // luminance
+    y = 255 - y;                             // invert (white ink → black)
+    y = Math.max(0, Math.min(255, (y-128)*contrast + 128 + bias));
+    d[i]=d[i+1]=d[i+2]=y; d[i+3]=255;
+  }
+  tctx.putImageData(img, 0, 0);
+
+  // thicken slightly
+  tctx.globalCompositeOperation='multiply';
+  tctx.filter='blur(0.4px)';
+  tctx.drawImage(tmp, 0, 0);
+  tctx.filter='none';
+  tctx.globalCompositeOperation='source-over';
+  return tmp;
+}
+
+async function ocrAncient(canvasEl) {
+  const work = await Tesseract.createWorker('eng', 1);
+  await work.loadLanguage('chi_tra'); await work.loadLanguage('chi_sim'); await work.loadLanguage('jpn');
+  await work.initialize('chi_tra+chi_sim+jpn+eng');
+  await work.setParameters({ tessedit_pageseg_mode: 6 }); // block of text
+
+  const pre = preprocForAncient(canvasEl);
+  const rotations = [0, 90, 180, 270];
+  let best = { text:'', conf:-1, rot:0 };
+
+  for (const rot of rotations) {
+    const rc = document.createElement('canvas'); rc.width=pre.width; rc.height=pre.height;
+    const rcx = rc.getContext('2d');
+    rcx.fillStyle='#fff'; rcx.fillRect(0,0,rc.width,rc.height);
+    rcx.save(); rcx.translate(rc.width/2, rc.height/2); rcx.rotate(rot*Math.PI/180);
+    rcx.drawImage(pre, -pre.width/2, -pre.height/2); rcx.restore();
+
+    const { data } = await work.recognize(rc.toDataURL('image/png'));
+    const text = (data.text||'').trim();
+    const conf = (data.confidence != null ? data.confidence : (data.meanConfidence||0)*100);
+    if (text && conf > best.conf) best = { text, conf, rot };
+    if (conf >= 78 && text.length >= 2) break; // early success
+  }
+
+  await work.terminate();
+  return best;
+}
+
+document.getElementById('aiProBtn').onclick = async () => {
+  const btn = document.getElementById('aiProBtn');
+  btn.disabled = true; btn.textContent = 'OCR Pro…';
+  try{
+    const res = await ocrAncient(canvas);
+    if (!res.text) {
+      pushMsg('📜 Could not confidently read ancient script. Try larger, higher-contrast strokes.', 'system');
+    } else {
+      pushMsg(`🧾 OCR（古文） conf=${Math.round(res.conf)} rot=${res.rot}°\n` + res.text, 'user');
+      const translated = await translate(res.text, 'en');
+      pushMsg('🌐 Translated\n' + translated, 'assistant');
+      if (res.conf >= 55){ ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); }
+    }
+  }catch(e){ pushMsg('OCR Pro error: ' + e, 'system'); }
+  btn.disabled = false; btn.textContent = 'OCR Pro（古文）';
+};
+
+/* ===== Translate helper (free demo endpoint) ===== */
 async function translate(q,target='en'){
   try{
-    const res=await fetch('https://libretranslate.com/translate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({q,source:'auto',target})});
+    const res=await fetch('https://libretranslate.com/translate',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({q,source:'auto',target})
+    });
     const j=await res.json(); return j.translatedText||q;
   }catch{return q;}
 }
@@ -222,7 +306,11 @@ document.getElementById('sendBtn').onclick=async()=>{
   const input=document.getElementById('userInput'); const msg=input.value.trim(); if(!msg)return;
   pushMsg(msg,'user'); const reply=await fakeReply(msg); pushMsg(reply,'assistant'); input.value=''; input.focus();
 };
-async function fakeReply(m){ if(/upload|画像|photo/i.test(m)) return "Upload で画像を読み込み、キャンバスへ自動フィットします。"; return "You said: "+m; }
+async function fakeReply(m){
+  if(/筆|fude/i.test(m)) return "筆はApple Pencilの圧力と速度で太さが変わります。";
+  if(/ocr|古文|漢字/i.test(m)) return "OCR Pro（古文）で前処理＋多言語＋回転を試します。";
+  return "You said: " + m;
+}
 function pushMsg(content, role='assistant'){
   const chat=document.getElementById('chat');
   const div=document.createElement('div'); div.className='msg';
