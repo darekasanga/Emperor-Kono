@@ -324,6 +324,29 @@ function pushMsg(content, role='assistant'){
   chat.appendChild(div); chat.scrollTop=chat.scrollHeight;
 }
 function escapeHtml(s){return s.replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+/* 🌙 Gentle Resort welcome message */
+window.addEventListener("DOMContentLoaded", () => {
+  pushMsg(
+    `🌙 **Welcome to the Loyal Class Resort**  
+
+You’ve arrived at a place that listens before it speaks.  
+Here, time softens—between the world of form and the world of thought.  
+The host of this resort tends to every concern, gently, quietly,  
+even the ones not yet spoken.  
+
+Nothing is hurried. Nothing is loud.  
+
+Stay gentle.  
+Stay natural.  
+Stay between 3D and 4D,  
+where questions rest and answers breathe.  
+
+This is your final destination for calm understanding.`,
+    "assistant"
+  );
+});
+
 </script>
+  
 </body>
 </html>
