@@ -3,31 +3,20 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover" />
-<title>Gentle Field – Drawing Resort (with Login)</title>
+<title>Gentle Field – Drawing Resort (Login + OCR + GPT)</title>
 <style>
   :root { color-scheme: dark; --canvasMaxW: 440px; }
   body { margin:0; background:#0b0b0b; color:#eee; font-family: system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
          height:100vh; display:flex; flex-direction:column; }
-  /* Login overlay */
-  #authOverlay{
-    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-    background:rgba(0,0,0,.65); z-index:50; backdrop-filter: blur(6px);
-  }
-  #authCard{
-    width:min(560px,92vw); background:#101010; border:1px solid #222; border-radius:16px; padding:18px;
-    box-shadow:0 20px 60px rgba(0,0,0,.5);
-  }
-  #authCard h1{ margin:0 0 6px 0; font-size:20px; }
-  #authCard p{ margin:0 0 12px 0; color:#bbb; }
-  .row{ display:flex; gap:8px; align-items:center; margin-top:8px; }
-  .input{ flex:1; min-width:0; background:#121212; border:1px solid #2a2a2a; border-radius:10px; color:#eee; padding:10px 12px; font-size:16px; }
-  .btn{ background:#222; color:#eee; border:1px solid #333; border-radius:10px; padding:10px 14px; font-size:16px; cursor:pointer; }
-  .btn:disabled{ opacity:.5; cursor:not-allowed; }
-  .note{ font-size:12px; color:#aaa; margin-top:6px; }
+  /* Top / status */
+  .topbar { display:flex; gap:8px; align-items:center; justify-content:center; padding-top:6px; }
+  #netStatus { position: sticky; top: 8px; align-self: center; background:#111; border:1px solid #222; border-radius:999px;
+    padding:8px 12px; color:#ccc; font-size:14px; box-shadow: 0 8px 20px rgba(0,0,0,.35); opacity:.95; }
+  #userBadge { font-size:12px; color:#ccc; opacity:.9 }
+  .btn { background:#222; color:#eee; border:1px solid #333; border-radius:10px; padding:8px 12px; font-size:15px; cursor:pointer; }
+  .btn:disabled { opacity:.55; cursor:not-allowed }
 
-  /* Network status pill */
-  #netStatus{ position: sticky; top: 8px; align-self: center; background:#111; border:1px solid #222; border-radius:999px;
-    padding:8px 12px; margin:8px; color:#ccc; font-size:14px; box-shadow: 0 8px 20px rgba(0,0,0,.35); opacity:.95; }
+  /* App layout */
   .wrap { display:flex; flex:1; flex-wrap:wrap; gap:12px; padding:12px; box-sizing:border-box; overflow:hidden; }
   .left { width:min(var(--canvasMaxW),100%); }
   #canvas { width:100%; aspect-ratio:3/4; background:#00142a; border-radius:12px; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
@@ -43,13 +32,19 @@
   #inputBar { display:flex; gap:8px; margin-top:10px; }
   #userInput { flex:1; min-width:0; background:#111; border:1px solid #222; border-radius:10px; color:#eee; padding:10px 12px; font-size:16px; }
   .modeTag { padding:4px 8px; border:1px solid #333; border-radius:8px; font-size:12px; opacity:.8 }
-  .topbar { display:flex; gap:8px; align-items:center; justify-content:center; }
-  #userBadge { font-size:12px; color:#ccc; opacity:.9 }
+
+  /* Login overlay */
+  #authOverlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.65); z-index:50; backdrop-filter: blur(6px); }
+  #authCard{ width:min(560px,92vw); background:#101010; border:1px solid #222; border-radius:16px; padding:18px; box-shadow:0 20px 60px rgba(0,0,0,.5); }
+  #authCard h1{ margin:0 0 6px 0; font-size:20px; }
+  #authCard p{ margin:0 0 12px 0; color:#bbb; }
+  .row{ display:flex; gap:8px; align-items:center; margin-top:8px; }
+  .input{ flex:1; min-width:0; background:#121212; border:1px solid #2a2a2a; border-radius:10px; color:#eee; padding:10px 12px; font-size:16px; }
+  .note{ font-size:12px; color:#aaa; margin-top:6px; }
 </style>
 </head>
 <body>
 
-<!-- 🌐 Network status + user controls -->
 <div class="topbar">
   <div id="netStatus">Checking network…</div>
   <div id="userBadge" hidden></div>
@@ -61,27 +56,22 @@
   <div id="authCard">
     <h1>🌙 Gentle Field</h1>
     <p>やさしく、静かに。はじめる前にサインインしてください。</p>
-
     <div class="row">
       <input id="emailInput" class="input" type="email" placeholder="Email (magic link)" />
       <button id="emailLinkBtn" class="btn">Send Link</button>
     </div>
     <div class="note">メールに届いたリンクをタップするとログインできます。</div>
-
     <div class="row" style="margin-top:12px;">
       <button id="googleBtn" class="btn">Sign in with Google</button>
     </div>
-
     <div class="note" id="authMsg"></div>
   </div>
 </div>
 
 <div class="wrap" id="app" style="display:none;">
-
   <!-- Left : Drawing -->
   <div class="left">
     <canvas id="canvas"></canvas>
-
     <div class="toolbar">
       <span class="modeTag" id="modeLabel">Mode: ペン</span>
       <button id="penBtn">ペン</button>
@@ -91,7 +81,6 @@
       <div class="ink l" data-w="12" title="太"></div>
       <div class="ink erase" data-erase="1" title="消しゴム"></div>
     </div>
-
     <div class="toolbar">
       <button id="saveBtn">Save</button>
       <button id="uploadBtn">Upload</button>
@@ -113,30 +102,31 @@
       <button id="sendBtn">Send</button>
     </div>
   </div>
-
 </div>
 
 <!-- OCR -->
 <script src="https://unpkg.com/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
-
-<!-- Firebase SDKs (compat builds keep it simple) -->
+<!-- Firebase (compat SDK) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
 <script>
 /* =======================
    FIREBASE CONFIG — TODO
+   Paste the full snippet from Firebase Console (include ALL keys).
    ======================= */
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "emperor-project-992a8.firebaseapp.com",
+  apiKey: "AIza...YOUR_REAL_KEY...",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
   projectId: "YOUR_PROJECT_ID",
-  appId: "YOUR_APP_ID"
+  storageBucket: "YOUR_PROJECT_ID.appspot.com",
+  messagingSenderId: "1234567890",
+  appId: "1:1234567890:web:abcdef123456"
 };
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 
-/* ===== Login UI logic ===== */
+/* ===== Login logic ===== */
 const overlay = document.getElementById('authOverlay');
 const appView = document.getElementById('app');
 const authMsg = document.getElementById('authMsg');
@@ -146,53 +136,34 @@ const googleBtn = document.getElementById('googleBtn');
 const userBadge = document.getElementById('userBadge');
 const signOutBtn = document.getElementById('signOutBtn');
 
-// Email link (passwordless)
 emailLinkBtn.onclick = async () => {
   const email = (emailInput.value || '').trim();
   if (!email) { authMsg.textContent = 'Email を入力してください。'; return; }
   try {
-    const actionCodeSettings = {
-      url: window.location.origin + window.location.pathname, // return to same page
-      handleCodeInApp: true
-    };
+    const actionCodeSettings = { url: location.origin + location.pathname, handleCodeInApp: true };
     await auth.sendSignInLinkToEmail(email, actionCodeSettings);
-    window.localStorage.setItem('emailForSignIn', email);
+    localStorage.setItem('emailForSignIn', email);
     authMsg.textContent = '送信しました。メールのリンクをタップしてください。';
-  } catch (e) {
-    authMsg.textContent = 'エラー: ' + e.message;
-  }
+  } catch (e) { authMsg.textContent = 'エラー: ' + e.message; }
 };
 
-// If returning from email link
 (async function handleEmailLink() {
   try {
-    if (auth.isSignInWithEmailLink(window.location.href)) {
-      let email = window.localStorage.getItem('emailForSignIn');
-      if (!email) {
-        email = window.prompt('確認のためメールアドレスを入力してください');
-      }
-      await auth.signInWithEmailLink(email, window.location.href);
-      window.localStorage.removeItem('emailForSignIn');
+    if (auth.isSignInWithEmailLink(location.href)) {
+      let email = localStorage.getItem('emailForSignIn') || prompt('確認のためメールアドレスを入力してください');
+      await auth.signInWithEmailLink(email, location.href);
+      localStorage.removeItem('emailForSignIn');
     }
-  } catch (e) {
-    // ignore
-  }
+  } catch {}
 })();
 
-// Google sign-in
 googleBtn.onclick = async () => {
-  try {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    await auth.signInWithPopup(provider);
-  } catch (e) {
-    authMsg.textContent = 'Google サインインに失敗: ' + e.message;
-  }
+  try { await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+  catch (e) { authMsg.textContent = 'Google サインインに失敗: ' + e.message; }
 };
 
-// Sign out
 signOutBtn.onclick = () => auth.signOut();
 
-// React to auth state
 auth.onAuthStateChanged(user => {
   if (user) {
     overlay.style.display = 'none';
@@ -200,7 +171,6 @@ auth.onAuthStateChanged(user => {
     userBadge.hidden = false;
     signOutBtn.style.display = 'inline-block';
     userBadge.textContent = `Signed in as ${user.displayName || user.email}`;
-    // Optional: send ID token with /api/chat for server verification
     user.getIdToken().then(tok => window.__IDTOKEN = tok);
   } else {
     overlay.style.display = 'flex';
@@ -224,14 +194,11 @@ function updateNetworkStatus(){
     ['aiBtn','aiProBtn','sendBtn'].forEach(id=>{ const el=document.getElementById(id); if(el) el.disabled=true; });
   }
 }
-window.addEventListener('online', updateNetworkStatus);
-window.addEventListener('offline', updateNetworkStatus);
+addEventListener('online', updateNetworkStatus);
+addEventListener('offline', updateNetworkStatus);
 updateNetworkStatus();
 
-/* ===== Canvas, tools, OCR, chat (same as before) ===== */
-// (Everything below is your existing app: smooth 筆, undo/redo, OCR, etc.)
-
-/* Retina canvas */
+/* ===== Canvas & tools ===== */
 const canvas=document.getElementById('canvas');
 const ctx=canvas.getContext('2d',{willReadFrequently:true});
 function resizeCanvas(){
@@ -243,7 +210,6 @@ function resizeCanvas(){
 }
 new ResizeObserver(resizeCanvas).observe(canvas); resizeCanvas();
 
-/* Modes & tools */
 ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle='#fff'; ctx.lineWidth=6;
 let drawing=false, erasing=false, penMode=true, fudeMode=false;
 const modeLabel=document.getElementById('modeLabel');
@@ -255,16 +221,14 @@ function setInk(w,erase=false){ erasing=erase; if(erase){ penMode=true; fudeMode
   if(!fudeMode) ctx.lineWidth=w||ctx.lineWidth; ctx.strokeStyle=erase?'rgba(0,0,0,1)':'#fff'; }
 document.querySelectorAll('.ink').forEach(el=>{ el.onclick=()=> el.dataset.erase? setInk(ctx.lineWidth,true) : setInk(+el.dataset.w,false); });
 
-/* Drawing helpers */
 function pt(x,y){ const r=canvas.getBoundingClientRect(); return {x:x-r.left, y:y-r.top}; }
 let lastP=null,lastTime=0,lastForFude=null,lastPressure=0.6;
 const FUDE_BASE=14,FUDE_MIN=1.6,FUDE_SPACING=0.8,FUDE_SOFT=0.18;
-function fudeStamp(x,y,r){ ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#fff';
-  ctx.shadowColor='#fff'; ctx.shadowBlur=r*FUDE_SOFT; ctx.beginPath(); ctx.arc(x,y,Math.max(FUDE_MIN,r),0,Math.PI*2); ctx.fill(); ctx.restore(); }
-function fudeBetween(a,b,pr,dt){ const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy);
-  const steps=Math.max(1,Math.floor(dist/FUDE_SPACING)); const speed=dist/Math.max(1,dt);
-  const pF=pr>0?pr:lastPressure; const sF=1/(1+speed*10);
-  for(let i=0;i<=steps;i++){ const t=i/steps, x=a.x+dx*t, y=a.y+dy*t; const r=Math.max(FUDE_MIN,FUDE_BASE*pF*sF); fudeStamp(x,y,r); }
+function fudeStamp(x,y,r){ ctx.save(); ctx.globalCompositeOperation='source-over'; ctx.fillStyle='#fff'; ctx.shadowColor='#fff'; ctx.shadowBlur=r*FUDE_SOFT;
+  ctx.beginPath(); ctx.arc(x,y,Math.max(FUDE_MIN,r),0,Math.PI*2); ctx.fill(); ctx.restore(); }
+function fudeBetween(a,b,pr,dt){ const dx=b.x-a.x, dy=b.y-a.y, dist=Math.hypot(dx,dy); const steps=Math.max(1,Math.floor(dist/FUDE_SPACING));
+  const speed=dist/Math.max(1,dt); const pF=pr>0?pr:lastPressure; const sF=1/(1+speed*10);
+  for(let i=0;i<=steps;i++){ const t=i/steps, x=a.x+dx*t, y=a.y+dy*t; const r=Math.max(FUDE_MIN, FUDE_BASE*pF*sF); fudeStamp(x,y,r); }
   lastPressure=pF; }
 function penTo(p){ if(!lastP){ lastP=p; return; } const mid={x:(lastP.x+p.x)/2, y:(lastP.y+p.y)/2};
   ctx.beginPath(); ctx.moveTo(lastP.x,lastP.y); ctx.quadraticCurveTo(lastP.x,lastP.y,mid.x,mid.y); ctx.stroke(); lastP=p; }
@@ -272,22 +236,19 @@ function penTo(p){ if(!lastP){ lastP=p; return; } const mid={x:(lastP.x+p.x)/2, 
 /* Undo / Redo */
 let history=[], redoStack=[];
 function saveState(){ history.push(canvas.toDataURL()); if(history.length>30) history.shift(); redoStack=[]; }
-document.getElementById('undoBtn').onclick=()=>{ if(history.length<2)return; const last=history.pop(); redoStack.push(last);
-  const img=new Image(); img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); };
-  img.src=history[history.length-1]; };
-document.getElementById('redoBtn').onclick=()=>{ if(!redoStack.length)return; const data=redoStack.pop(); history.push(data);
-  const img=new Image(); img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); };
-  img.src=data; };
+document.getElementById('undoBtn').onclick=()=>{ if(history.length<2) return; const last=history.pop(); redoStack.push(last);
+  const img=new Image(); img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); }; img.src=history[history.length-1]; };
+document.getElementById('redoBtn').onclick=()=>{ if(!redoStack.length) return; const data=redoStack.pop(); history.push(data);
+  const img=new Image(); img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); }; img.src=data; };
 saveState();
 
-/* Drawing events */
+/* Draw events */
 canvas.addEventListener('pointerdown',e=>{ canvas.setPointerCapture(e.pointerId); drawing=true; lastTime=performance.now();
-  lastP=lastForFude=pt(e.clientX,e.clientY);
-  if(fudeMode&&!erasing){ const pr=e.pressure||(e.pointerType==='pen'?0.6:0.5); fudeStamp(lastP.x,lastP.y,Math.max(FUDE_MIN,FUDE_BASE*pr)); }});
-canvas.addEventListener('pointermove',e=>{ if(!drawing)return; const evs=e.getCoalescedEvents? e.getCoalescedEvents() : [e];
+  lastP=lastForFude=pt(e.clientX,e.clientY); if(fudeMode&&!erasing){ const pr=e.pressure||(e.pointerType==='pen'?0.6:0.5); fudeStamp(lastP.x,lastP.y,Math.max(FUDE_MIN,FUDE_BASE*pr)); }});
+canvas.addEventListener('pointermove',e=>{ if(!drawing) return; const evs=e.getCoalescedEvents? e.getCoalescedEvents() : [e];
   for(const ev of evs){ const p=pt(ev.clientX,ev.clientY); if(erasing||penMode){ penTo(p); } else { const now=performance.now(); const dt=now-lastTime; lastTime=now;
     const pr=(ev.pressure>0?ev.pressure:(ev.pointerType==='pen'?0.6:0.5)); fudeBetween(lastForFude,p,pr,dt); lastForFude=p; } }});
-window.addEventListener('pointerup',()=>{ drawing=false; lastP=null; lastForFude=null; saveState(); });
+addEventListener('pointerup',()=>{ drawing=false; lastP=null; lastForFude=null; saveState(); });
 
 /* Buttons */
 document.getElementById('redrawBtn').onclick=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); saveState(); };
@@ -299,44 +260,58 @@ fileInput.onchange=async()=>{ const f=fileInput.files[0]; if(!f)return; const ur
   const w=img.naturalWidth*scale, h=img.naturalHeight*scale; const x=(cw-w)/2, y=(ch-h)/2; ctx.fillStyle='#00142a'; ctx.fillRect(0,0,cw,ch);
   ctx.drawImage(img,x,y,w,h); URL.revokeObjectURL(url); saveState(); }; img.src=url; };
 document.getElementById('compactBtn').onclick=()=>{ const root=document.documentElement; const current=getComputedStyle(root).getPropertyValue('--canvasMaxW').trim();
-  root.style.setProperty('--canvasMaxW', current==='360px' ? '440px' : '360px'); setTimeout(resizeCanvas,50); };
+  root.style.setProperty('--canvasMaxW', current==='360px' ? '440px' : '360px'); setTimeout(resizeCanvas, 50); };
 
-/* OCR */
+/* ===== OCR (blue bar suppressed) ===== */
 const netOk = () => navigator.onLine;
 Tesseract.setLogging(false);
+
 document.getElementById('aiBtn').onclick=async()=>{ if(!netOk()){ pushMsg('⚠️ Offline: OCR needs initial language files.', 'system'); return; }
   const b=document.getElementById('aiBtn'); b.disabled=true; b.textContent='AI mode…';
-  try{ const worker=await Tesseract.createWorker('eng',1); await worker.loadLanguage('jpn'); await worker.initialize('eng+jpn');
-    const {data}=await worker.recognize(canvas.toDataURL(), undefined, { logger: ()=>{} }); const text=(data.text||'').trim(); await worker.terminate();
-    if(!text){ pushMsg('🤖 No readable text found','system'); } else { pushMsg('📝 OCR\n'+text,'user'); const t=await translate(text,'en'); pushMsg('🌐 Translated\n'+t,'assistant');
-      ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); saveState(); } } catch(e){ pushMsg('OCR error: '+e,'system'); }
-  b.disabled=false; b.textContent='AI mode'; };
+  try{
+    const worker=await Tesseract.createWorker('eng',1);
+    await worker.loadLanguage('jpn'); await worker.initialize('eng+jpn');
+    const {data}=await worker.recognize(canvas.toDataURL(), undefined, { logger: ()=>{} });
+    const text=(data.text||'').trim(); await worker.terminate();
+    if(!text){ pushMsg('🤖 No readable text found','system'); }
+    else { pushMsg('📝 OCR\n'+text,'user'); const t=await translate(text,'en'); pushMsg('🌐 Translated\n'+t,'assistant'); ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); saveState(); }
+  }catch(e){ pushMsg('OCR error: '+e,'system'); }
+  b.disabled=false; b.textContent='AI mode';
+};
+
+/* ===== OCR Pro（古文） ===== */
 function preprocForAncient(canvasEl){ const r=canvasEl.getBoundingClientRect(); const W=Math.round(r.width*2), H=Math.round(r.height*2);
   const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H; const tctx=tmp.getContext('2d'); tctx.fillStyle='#fff'; tctx.fillRect(0,0,W,H); tctx.drawImage(canvasEl,0,0,W,H);
   const img=tctx.getImageData(0,0,W,H), d=img.data; const contrast=1.35, bias=-30;
   for(let i=0;i<d.length;i+=4){ const R=d[i],G=d[i+1],B=d[i+2]; let y=0.2126*R+0.7152*G+0.0722*B; y=255-y; y=Math.max(0,Math.min(255,(y-128)*contrast+128+bias)); d[i]=d[i+1]=d[i+2]=y; d[i+3]=255; }
   tctx.putImageData(img,0,0); tctx.globalCompositeOperation='multiply'; tctx.filter='blur(0.4px)'; tctx.drawImage(tmp,0,0); tctx.filter='none'; tctx.globalCompositeOperation='source-over'; return tmp; }
-async function ocrAncient(canvasEl){ const work=await Tesseract.createWorker('eng',1); await work.loadLanguage('chi_tra'); await work.loadLanguage('chi_sim'); await work.loadLanguage('jpn');
+async function ocrAncient(canvasEl){ const work=await Tesseract.createWorker('eng',1);
+  await work.loadLanguage('chi_tra'); await work.loadLanguage('chi_sim'); await work.loadLanguage('jpn');
   await work.initialize('chi_tra+chi_sim+jpn+eng'); await work.setParameters({ tessedit_pageseg_mode: 6 });
   const pre=preprocForAncient(canvasEl); const rots=[0,90,180,270]; let best={text:'',conf:-1,rot:0};
   for(const rot of rots){ const rc=document.createElement('canvas'); rc.width=pre.width; rc.height=pre.height; const rcx=rc.getContext('2d'); rcx.fillStyle='#fff'; rcx.fillRect(0,0,rc.width,rc.height);
     rcx.save(); rcx.translate(rc.width/2,rc.height/2); rcx.rotate(rot*Math.PI/180); rcx.drawImage(pre,-pre.width/2,-pre.height/2); rcx.restore();
-    const {data}=await work.recognize(rc.toDataURL('image/png'), undefined, { logger: ()=>{} }); const text=(data.text||'').trim();
-    const conf=(data.confidence!=null?data.confidence:(data.meanConfidence||0)*100); if(text && conf>best.conf) best={text,conf,rot}; if(conf>=78 && text.length>=2) break; }
+    const {data}=await work.recognize(rc.toDataURL('image/png'), undefined, { logger: ()=>{} });
+    const text=(data.text||'').trim(); const conf=(data.confidence!=null?data.confidence:(data.meanConfidence||0)*100);
+    if(text && conf>best.conf) best={text,conf,rot}; if(conf>=78 && text.length>=2) break; }
   await work.terminate(); return best; }
 document.getElementById('aiProBtn').onclick=async()=>{ if(!netOk()){ pushMsg('⚠️ Offline: 初回は言語ファイルの取得が必要です。', 'system'); return; }
   const btn=document.getElementById('aiProBtn'); btn.disabled=true; btn.textContent='OCR Pro…';
-  try{ const res=await ocrAncient(canvas); if(!res.text){ pushMsg('📜 読み取りできません。少し大きく・濃く書いてみてください。','system'); }
+  try{
+    const res=await ocrAncient(canvas);
+    if(!res.text){ pushMsg('📜 読み取りできません。少し大きく・濃く書いてみてください。','system'); }
     else{ pushMsg(`🧾 OCR（古文） conf=${Math.round(res.conf)} rot=${res.rot}°\n`+res.text,'user'); const translated=await translate(res.text,'en'); pushMsg('🌐 Translated\n'+translated,'assistant');
-      if(res.conf>=55){ ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); saveState(); } } } catch(e){ pushMsg('OCR Pro error: '+e,'system'); }
-  btn.disabled=false; btn.textContent='OCR Pro（古文）'; };
+      if(res.conf>=55){ ctx.clearRect(0,0,canvas.width,canvas.height); resizeCanvas(); saveState(); } }
+  }catch(e){ pushMsg('OCR Pro error: '+e,'system'); }
+  btn.disabled=false; btn.textContent='OCR Pro（古文）';
+};
 
-/* Translate helper */
+/* Translate helper (free demo endpoint) */
 async function translate(q,target='en'){ if(!navigator.onLine) return q;
   try{ const res=await fetch('https://libretranslate.com/translate',{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({q,source:'auto',target}) });
     const j=await res.json(); return j.translatedText || q; } catch{ return q; } }
 
-/* Chat (uses /api/chat if present; sends Firebase ID token if available) */
+/* Chat (calls /api/chat; attaches Firebase ID token if present) */
 document.getElementById('sendBtn').onclick=async()=>{
   const input=document.getElementById('userInput'); const msg=input.value.trim(); if(!msg) return;
   pushMsg(msg,'user');
@@ -344,7 +319,7 @@ document.getElementById('sendBtn').onclick=async()=>{
   if(navigator.onLine){
     try{
       const headers={'Content-Type':'application/json'};
-      if(window.__IDTOKEN) headers['Authorization'] = 'Bearer ' + window.__IDTOKEN;
+      if(window.__IDTOKEN) headers.Authorization='Bearer '+window.__IDTOKEN;
       const r=await fetch('/api/chat',{method:'POST',headers,body:JSON.stringify({message:msg})});
       if(r.ok){ const j=await r.json(); reply=j.reply || '(no reply)'; } else { reply='（ローカル応答）Gentle field echoes softly: “'+msg+'”'; }
     }catch{ reply='（ローカル応答）Gentle field echoes softly: “'+msg+'”'; }
@@ -353,7 +328,7 @@ document.getElementById('sendBtn').onclick=async()=>{
 };
 
 /* Welcome */
-window.addEventListener("DOMContentLoaded",()=>{ pushMsg(`🌙 **Welcome to the Loyal Class Resort**  
+addEventListener("DOMContentLoaded",()=>{ pushMsg(`🌙 **Welcome to the Loyal Class Resort**  
 
 You’ve arrived at a place that listens before it speaks.  
 Here, time softens—between the world of form and the world of thought.  
