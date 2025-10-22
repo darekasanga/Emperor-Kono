@@ -1,11 +1,235 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Emperor Kono Theory</title>
-</head>
-<body>
-  <h1>Welcome to Emperor Kono</h1>
-  <p>This is the beginning of a new dimension theory by Kono.</p>
-</body>
-</html>
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/index.html b/index.html
+index 84af72f4b51f4f9b5bdbd9ae2c89abd178481466..9eeac301ac95efd5b0fd12c5519ca9c658a8dc4d 100644
+--- a/index.html
++++ b/index.html
+@@ -1,11 +1,223 @@
+ <!DOCTYPE html>
+ <html lang="en">
+ <head>
+-  <meta charset="UTF-8">
++  <meta charset="UTF-8" />
++  <meta name="viewport" content="width=device-width, initial-scale=1" />
+   <title>Emperor Kono Theory</title>
++  <style>
++    :root {
++      color-scheme: dark;
++      --bg-gradient: radial-gradient(circle at top, #14223a, #070910 65%);
++      --card-bg: rgba(17, 24, 39, 0.86);
++      --card-border: rgba(148, 163, 184, 0.18);
++      --accent: #7dd3fc;
++      --accent-soft: rgba(125, 211, 252, 0.18);
++      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
++    }
++
++    * { box-sizing: border-box; }
++
++    body {
++      margin: 0;
++      min-height: 100vh;
++      background: var(--bg-gradient);
++      color: #e0f2fe;
++      display: flex;
++      flex-direction: column;
++    }
++
++    header {
++      padding: 64px 24px 32px;
++      text-align: center;
++    }
++
++    h1 {
++      font-size: clamp(2.6rem, 6vw, 4rem);
++      letter-spacing: 0.06em;
++      margin: 0 0 16px;
++      color: #f8fafc;
++    }
++
++    header p {
++      margin: 0 auto;
++      max-width: 640px;
++      font-size: clamp(1rem, 2.4vw, 1.25rem);
++      color: #cbd5f5;
++      line-height: 1.6;
++    }
++
++    main {
++      width: min(1080px, 92vw);
++      margin: 0 auto 64px;
++      display: grid;
++      gap: 32px;
++    }
++
++    section {
++      background: var(--card-bg);
++      border: 1px solid var(--card-border);
++      border-radius: 20px;
++      padding: 28px clamp(20px, 5vw, 40px);
++      box-shadow: 0 20px 45px rgba(2, 6, 23, 0.55);
++      backdrop-filter: blur(10px);
++    }
++
++    .section-title {
++      margin: 0 0 12px;
++      font-size: 1.4rem;
++      color: #f9fafb;
++      letter-spacing: 0.04em;
++    }
++
++    .description {
++      font-size: 1rem;
++      line-height: 1.8;
++      color: #d6e3ff;
++      margin: 0;
++    }
++
++    .experience-grid {
++      display: grid;
++      gap: 18px;
++      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
++    }
++
++    .card {
++      border-radius: 16px;
++      border: 1px solid var(--accent-soft);
++      padding: 20px;
++      background: rgba(13, 20, 35, 0.78);
++      display: flex;
++      flex-direction: column;
++      gap: 12px;
++      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
++    }
++
++    .card:hover {
++      transform: translateY(-4px);
++      border-color: rgba(125, 211, 252, 0.45);
++      box-shadow: 0 20px 30px rgba(8, 47, 73, 0.4);
++    }
++
++    .card h3 {
++      margin: 0;
++      font-size: 1.2rem;
++      color: #f1f5f9;
++    }
++
++    .card p {
++      margin: 0;
++      line-height: 1.6;
++      color: #cfe9ff;
++      flex: 1;
++    }
++
++    .card a {
++      align-self: flex-start;
++      color: #0ea5e9;
++      text-decoration: none;
++      font-weight: 600;
++      padding: 8px 14px;
++      border-radius: 999px;
++      background: rgba(14, 165, 233, 0.14);
++      border: 1px solid rgba(14, 165, 233, 0.35);
++      transition: background 0.2s ease, color 0.2s ease;
++    }
++
++    .card a:hover,
++    .card a:focus {
++      background: rgba(56, 189, 248, 0.22);
++      color: #e0f2fe;
++    }
++
++    .notes ul {
++      margin: 0;
++      padding-left: 20px;
++      line-height: 1.7;
++      color: #c7e0ff;
++    }
++
++    footer {
++      margin-top: auto;
++      padding: 32px 16px;
++      text-align: center;
++      font-size: 0.95rem;
++      color: rgba(207, 233, 255, 0.72);
++    }
++
++    footer a {
++      color: #7dd3fc;
++      text-decoration: none;
++    }
++
++    footer a:hover,
++    footer a:focus {
++      text-decoration: underline;
++    }
++  </style>
+ </head>
+ <body>
+-  <h1>Welcome to Emperor Kono</h1>
+-  <p>This is the beginning of a new dimension theory by Kono.</p>
++  <header>
++    <h1>Emperor Kono</h1>
++    <p>
++      Exploring Kono Theory — a dimensional look at gravity, electromagnetism, and superconductivity
++      across the spaces between 0D and 3D. Step into gentle visualizations and experiments inspired by Kono’s notebooks.
++    </p>
++  </header>
++
++  <main>
++    <section>
++      <h2 class="section-title">What is Kono Theory?</h2>
++      <p class="description">
++        Kono Theory frames familiar forces as stacked dimensional flows: gravity as a planar 2D field, electromagnetism
++        as layered tapestries, and superconductivity as diagonal bridges that bend time. The work is speculative and artistic,
++        inviting contemplation about how perceptions of dimension can reshape intuition about space, matter, and time.
++      </p>
++    </section>
++
++    <section>
++      <h2 class="section-title">Try the Field Experiments</h2>
++      <div class="experience-grid">
++        <article class="card">
++          <h3>Gentle Field Studio</h3>
++          <p>
++            Draw directly on a luminous canvas, run OCR on your sketches, and chat with an assistant who responds in a calm tone.
++            Firebase authentication keeps the studio cozy for invited guests.
++          </p>
++          <a href="draw.html">Open draw.html →</a>
++        </article>
++
++        <article class="card">
++          <h3>Gravity Field (Classic)</h3>
++          <p>
++            A three.js scene that swirls orbiting particles around a central core. Rotate the camera to feel how stacked layers of gravity
++            might appear when translated into light.
++          </p>
++          <a href="graph_field.html">Open graph_field.html →</a>
++        </article>
++
++        <article class="card">
++          <h3>Lightweight Gravity</h3>
++          <p>
++            Mobile-friendly, energy-aware rendering of the particle field. Designed for tablets and lower-power browsers without controls to ensure smooth motion.
++          </p>
++          <a href="public/gravity_field.html">Open public/gravity_field.html →</a>
++        </article>
++      </div>
++    </section>
++
++    <section class="notes">
++      <h2 class="section-title">Notes for collaborators</h2>
++      <ul>
++        <li>OpenAI API access is routed through <code>/api/chat</code> with your <code>OPENAI_API_KEY</code> stored as a Vercel environment variable.</li>
++        <li>Firebase authentication requires inserting your own configuration block inside <code>draw.html</code>.</li>
++        <li>Custom domains such as <code>emperor-kono.gallery</code> can be added from the Vercel project settings &rarr; Domains once DNS points to Vercel.</li>
++      </ul>
++    </section>
++  </main>
++
++  <footer>
++    Original theory and artwork by <a href="https://chatgpt.com/share/687a7bde-4028-8001-8b67-e36c83115d84" rel="noopener noreferrer">Kono</a> · MIT License
++  </footer>
+ </body>
+ </html>
+ 
+EOF
+)
