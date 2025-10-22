@@ -55,7 +55,7 @@
       const g = new THREE.SphereGeometry(0.028, 6, 6);
       const m = new THREE.MeshBasicMaterial({ color:0xfff2a8 });
       const group = new THREE.Group();
-      const COUNT = 320; // ← ここを増減すると負荷が変わる
+      const COUNT = 160; // ← ここを増減すると負荷が変わる
       for (let i=0;i<COUNT;i++){
         const p = new THREE.Mesh(g, m);
         const r = THREE.Math.randFloat(2.0, 5.2);
